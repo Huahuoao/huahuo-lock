@@ -13,4 +13,4 @@ spring:
         max-wait: -1ms
     client-type: lettuce
 lock:
- expire-time: 30   #??s
+ expire-time: 30

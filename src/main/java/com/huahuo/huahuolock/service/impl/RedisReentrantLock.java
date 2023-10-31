@@ -71,26 +71,31 @@ public class RedisReentrantLock implements DistributedLock {
      * @return 是否加锁成功
      */
     private boolean tryLock(String key, String value, long timeout) {
-        String command = "if (redis.call('exists', KEYS[1]) == 0) then " +
-                "redis.call('hset', KEYS[1], ARGV[2], 1); " +
-                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-                "return 0; " +
-                "end; " +
-                "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
-                "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
-                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-                "return 0; " +
-                "end; " +
-                "return redis.call('pttl', KEYS[1]);";
+        String command =
+                "if (redis.call('exists', KEYS[1]) == 0) then " +                   //判断指定的key是否存在
+                        "redis.call('hset', KEYS[1], ARGV[2], 1); " +                   //新增key，value为hash结构
+                        "redis.call('pexpire', KEYS[1], ARGV[1]); " +                   //设置过期时间
+                        "return nil; " +                                                //直接返回null，表示加锁成功
+                        "end; " +
+                        "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +         //判断hash中是否存在指定的建
+                        "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +                //hash中指定键的值+1
+                        "redis.call('pexpire', KEYS[1], ARGV[1]); " +                   //重置过期时间
+                        "return nil; " +                                                //返回null，表示加锁成功
+                        "end; " +
+                        "return redis.call('pttl', KEYS[1]);";                              //返回key的剩余过期时间，表示加锁失败
         RedisScript<Long> redisScript = new DefaultRedisScript<>(command, Long.class);
         String time = String.valueOf(timeout);
         List<String> keyList = Collections.singletonList(key);
+        return redisReentrantLockGetLuaResult(key, value, timeout, redisScript, time, keyList, redisTemplate, logger);
+    }
+
+    static boolean redisReentrantLockGetLuaResult(String key, String value, long timeout, RedisScript<Long> redisScript, String time, List<String> keyList, RedisTemplate redisTemplate, Logger logger) {
         Long result = (Long) redisTemplate.execute(redisScript, keyList, time, value);
-        if (result != null && result == 0) {
-            logger.info("成功添加锁{}", key);
+        if (result == null) {
+            logger.debug("acquire lock success, keyName:{}, lockValue:{}, timeout:{}", key, value, timeout);
             return true;
         } else {
-            logger.info("锁{}添加失败", key);
+            logger.debug("acquire lock fail, keyName:{}, lockValue:{}, ttl:{}", key, value, result);
             return false;
         }
     }
@@ -124,10 +129,14 @@ public class RedisReentrantLock implements DistributedLock {
         List<String> keys = Collections.singletonList(key);
         String time = String.valueOf(timeout);
         Long result = (Long) redisTemplate.execute(script, keys, time, value);
-        if (result == 0) {
-            logger.info("重入次数-1，锁{}未完全释放", key);
+        if (result == null) {
+            logger.warn("Current thread does not hold lock, keyName:{}, lockValue:{}", key, value);
+            throw new RuntimeException("current thread does not hold lock");
+        }
+        if (result == 1) {
+            logger.debug("release lock sucess, keyName:{}, lockValue:{}", key, value);
         } else {
-            logger.info("锁{}完全释放", key);
+            logger.debug("Decrease lock times sucess, keyName:{}, lockValue:{}", key, value);
         }
     }
 

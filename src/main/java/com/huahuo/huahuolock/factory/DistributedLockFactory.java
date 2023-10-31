@@ -1,6 +1,7 @@
 package com.huahuo.huahuolock.factory;
 
 
+import com.huahuo.huahuolock.service.impl.RedisReadWriteLock;
 import com.huahuo.huahuolock.service.impl.RedisReentrantLock;
 import com.huahuo.huahuolock.service.DistributedLock;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,23 +18,21 @@ public class DistributedLockFactory {
     @Qualifier("huahuoLockRedisTemplate")
     private RedisTemplate redisTemplate;
 
-   @Value("${lock.expire-time}")
-   Integer timeout;
+    @Value("${lock.expire-time}")
+    Integer timeout;
+
     public DistributedLock newRedisReentrantLock(String keyName) {
         String lockValue = UUID.randomUUID().toString();
         return new RedisReentrantLock(redisTemplate, keyName, lockValue, timeout);
     }
 
 
-
-
-//
-//    //Redis可重入读写锁  mode 为 "read" "write" 两种
-//    public DistributedLock newRedisReadWriteLock(String keyName, String mode) {
-//        String lockValue = UUID.randomUUID().toString();
-//        Integer timeout = 30;    //    // 单位s
-//        return new RedisReadWriteLock(redisClient, keyName, lockValue, timeout, mode);
-//    }
+    //Redis可重入读写锁  mode 为 "read" "write" 两种
+    public DistributedLock newRedisReadWriteLock(String keyName, String mode) {
+        String lockValue = UUID.randomUUID().toString();
+        Integer timeout = 30;    //    // 单位s
+        return new RedisReadWriteLock(redisTemplate, keyName, lockValue, timeout, mode);
+    }
 //
 //    //mysql 可重入锁
 //    public DistributedLock newMysqlReentrantLock(String keyName) {
